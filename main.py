@@ -1,0 +1,275 @@
+import pygame
+from pygame.locals import *
+import random
+
+pygame.init()
+
+# ekran oluşturma
+# create the window
+
+width = 500
+height = 500
+screen_size = (width, height)
+screen = pygame.display.set_mode(screen_size)
+pygame.display.set_caption('Car Game')
+
+# renkler
+# colors
+
+gray = (100, 100, 100)
+green = (76, 208, 56)
+red = (200, 0, 0)
+white = (255, 255, 255)
+yellow = (255, 232, 0)
+
+# oyun ayarları
+# game settings
+
+gameover = False
+speed = 2
+score = 0
+
+# kenar boyutları
+# markers size
+marker_width = 10
+marker_height = 50
+
+# road and edge markers
+road = (100, 0, 300, height)
+left_edge_marker = (95, 0, marker_width, height)
+rigth_edge_marker = (395, 0, marker_width, height)
+
+# şeritlerin x kordinatı
+# x coordinates of lanes
+left_lane = 150
+center_lane = 250
+right_lane = 300
+lanes = [left_lane, center_lane, right_lane]
+
+# şeritler için hareket animasyonu
+# for animating movement of the lane markers
+lane_marker_move_y = 0
+
+
+class Vehicle(pygame.sprite.Sprite):
+
+    def __init__(self, image, x, y):
+        pygame.sprite.Sprite.__init__(self)
+
+        # görüntüyü şeride göre ayarlamak
+        # scale the image down so it fits in the lane
+        image_scale = 90 / image.get_rect().width
+        new_width = image.get_rect().width * image_scale
+        new_height = image.get_rect().height * image_scale
+        self.image = pygame.transform.scale(image, (new_width, new_height))
+
+        self.rect = self.image.get_rect()
+        self.rect.center = [x, y]
+
+
+class PlayerVehicle(Vehicle):
+
+    def __init__(self, x, y):
+        image = pygame.image.load('images/car.png')
+        super().__init__(image, x, y)
+
+
+# oyuncuların başlama kordinatı
+# player's starting coordinates
+player_x = 250
+player_y = 400
+
+# oyuncuların arabalarını oluşturma
+# create the player's car
+player_group = pygame.sprite.Group()
+player = PlayerVehicle(player_x, player_y)
+player_group.add(player)
+
+# diğer araçların resimleri
+# load the other vehicle images
+image_filenames = ['mini_van.png', 'taxi.png', 'truck_1.png', 'truck_2.png']
+vehicle_images = []
+for image_filename in image_filenames:
+    image = pygame.image.load('images/' + image_filename)
+    vehicle_images.append(image)
+
+# araçlar için sprite oluşturma
+# sprite group for vehicles
+vehicle_group = pygame.sprite.Group()
+
+# çarpma/kaza resmi
+# load the crash image
+crash = pygame.image.load('images/crash.png')
+crash_rect = crash.get_rect()
+
+# oyun döngüsü
+# game loop
+
+clock = pygame.time.Clock()
+fps = 120
+running = True
+
+while running:
+
+    clock.tick(fps)
+
+    for event in pygame.event.get():
+        if event.type == QUIT:
+            running = False
+
+        # ok tuşlarını kullanarak aracı yönlendirme
+        # move the player's car using the left/right arrow keys
+        if event.type == KEYDOWN:
+
+            if event.key == K_LEFT and player.rect.center[0] > left_lane:
+                player.rect.x -= 100
+            elif event.key == K_RIGHT and player.rect.center[0] < right_lane:
+                player.rect.x += 100
+
+
+            # şerit değiştirdikten sonra yandan çarpma olup olmadığının kontrolü
+            # check if there's a side swipe collision after changing lanes
+            for vehicle in vehicle_group:
+                if pygame.sprite.collide_rect(player, vehicle):
+
+                    gameover = True
+
+                    # çarpışma eylemini, aracımızın diğer araçlara göre ayarlama ve çarpışma resminin yerini ayarlama
+                    # place the player's car next to other vehicle and determine where to position the crash image
+                    if event.key == K_LEFT:
+                        player.rect.left = vehicle.rect.right
+                        crash_rect.center = [player.rect.left, (player.rect.center[1] + vehicle.rect.center[1]) / 2]
+                    elif event.key == K_RIGHT:
+                        player.rect.right = vehicle.rect.left
+                        crash_rect.center = [player.rect.right, (player.rect.center[1] + vehicle.rect.center[1]) / 2]
+
+    # çimleri çizme
+    # draw the grass
+    screen.fill(green)
+
+    # yolu çizme
+    # draw the road
+    pygame.draw.rect(screen, gray, road)
+
+    # yol kenarlarını çizme
+    # draw the edge markers
+    pygame.draw.rect(screen, yellow, left_edge_marker)
+    pygame.draw.rect(screen, yellow, rigth_edge_marker)
+
+    # şeritleri çizme
+    # draw the lane markers
+    lane_marker_move_y += speed * 2
+    if lane_marker_move_y >= marker_height * 2:
+        lane_marker_move_y = 0
+    for y in range(marker_height * -2, height, marker_height * 2):
+        pygame.draw.rect(screen, white, (left_lane + 45, y + lane_marker_move_y, marker_width, marker_height))
+        pygame.draw.rect(screen, white, (center_lane + 45, y + lane_marker_move_y, marker_width, marker_height))
+
+    # oyuncunun aracını çizme
+    # draw the player's car
+    player_group.draw(screen)
+
+    # araçları ekleme
+    # add a vehicle
+    if len(vehicle_group) < 2:
+
+        # araçlar arası boşluklar
+        # ensure there's enough gap between vehicles
+        add_vehicle = True
+        for vehicle in vehicle_group:
+            if vehicle.rect.top < vehicle.rect.height * 1.5:
+                add_vehicle = False
+
+        if add_vehicle:
+            # araçların şeritlerde rastgele dağılımı
+            # select a random lane
+            lane = random.choice(lanes)
+
+            # araçların rastgele gelmesi(resim olarak)
+            # select a random vehicle image
+            image = random.choice(vehicle_images)
+            vehicle = Vehicle(image, lane, height / -2)
+            vehicle_group.add(vehicle)
+
+    # araçların hareketleri
+    # make the vehicles move
+    for vehicle in vehicle_group:
+        vehicle.rect.y += speed
+
+        # araç ekranın aşağısında kalırsa yani ekrandan kaybolursa o aracı yok etme
+        # remove vehicle once it goes off screen
+        if vehicle.rect.top >= height:
+            vehicle.kill()
+
+            # puan ekleme
+            # add to score
+            score += 1
+
+            # 5 araçtan sonra oyunu hızlandırma
+            # speed up the game after passing 5 vehicles
+            if score > 0 and score % 5 == 0:
+                speed += 1
+
+    # araçları çizme
+    # draw the vehicles
+    vehicle_group.draw(screen)
+
+    # puanı ekrana yazdırma
+    # display the score
+    font = pygame.font.Font(pygame.font.get_default_font(), 16)
+    text = font.render('Score: ' + str(score), True, white)
+    text_rect = text.get_rect()
+    text_rect.center = (50, 400)
+    screen.blit(text, text_rect)
+
+    # çarpışma algıyacısını kontrol etme
+    # check if there's a head on collision
+    if pygame.sprite.spritecollide(player, vehicle_group, True):
+        gameover = True
+        crash_rect.center = [player.rect.center[0], player.rect.top]
+
+    # ekrana oyun bitti yazdırma
+    # display game over
+    if gameover:
+        screen.blit(crash, crash_rect)
+
+        pygame.draw.rect(screen, red, (0, 50, width, 100))
+
+        font = pygame.font.Font(pygame.font.get_default_font(), 16)
+        text = font.render('Kaybettin!. Yeniden oynamak ister misin? (E ya da H)', True, white)
+        text_rect = text.get_rect()
+        text_rect.center = (width / 2, 100)
+        screen.blit(text, text_rect)
+
+    pygame.display.update()
+
+    # tekrar oynamak için veya oyundan çıkmak için bir tuş girdisi bekleme
+    # wait for user's input to play again or exit
+    while gameover:
+
+        clock.tick(fps)
+
+        for event in pygame.event.get():
+
+            if event.type == QUIT:
+                gameover = False
+                running = False
+
+            # EVET = e HAYIR = h
+            # get the user's input
+            if event.type == KEYDOWN:
+                if event.key == K_e:
+                    # oyunu baştan başlatma
+                    # reset the game
+                    gameover = False
+                    speed = 2
+                    score = 0
+                    vehicle_group.empty()
+                    player.rect.center = [player_x, player_y]
+                elif event.key == K_h:
+                    # döngüyü kırma
+                    # exit the loops
+                    gameover = False
+                    running = False
+
+pygame.quit()
